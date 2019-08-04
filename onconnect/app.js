@@ -9,7 +9,8 @@ exports.handler = function (event, context, callback) {
   var putParams = {
     TableName: process.env.TABLE_NAME,
     Item: {
-      connectionId: { S: event.requestContext.connectionId }
+      connectionId: { S: event.requestContext.connectionId },
+      currentMaxBid: { N: "0"}
     }
   };
 
