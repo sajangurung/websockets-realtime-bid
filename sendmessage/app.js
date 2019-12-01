@@ -7,34 +7,6 @@ const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10' });
 
 const { TABLE_NAME } = process.env;
 
-const update = async (connectionId, bid) => {
-
-  const params = {
-    TableName: TABLE_NAME,
-    Key: { connectionId: connectionId },
-    UpdateExpression: 'set #bids = list_append(if_not_exists(#bids, :empty_list), :bid), #currentMaxBid = :maxBid',
-    ConditionExpression: "currentMaxBid < :maxBid",
-    ExpressionAttributeNames: {
-      '#bids': 'bid',
-      '#currentMaxBid': 'currentMaxBid'
-    },
-    ExpressionAttributeValues: {
-      ':bid': [bid],
-      ':maxBid': bid,
-      ':empty_list': []
-    },
-    ReturnValues: 'UPDATED_NEW'
-  };
-
-  console.log('Params', params);
-  try {
-    const { Attributes } = await ddb.update(params).promise();
-    return Attributes;
-  } catch (e) {
-    console.log('Error updating db:', e.stack);
-  }
-}
-
 exports.handler = async (event, context) => {
   let connectionData;
 
@@ -51,25 +23,23 @@ exports.handler = async (event, context) => {
 
   const postData = JSON.parse(event.body).data;
 
-  if (isNaN(postData)) {
+  if (isNaN(postData.amount)) {
     return { statusCode: 400, body: 'Please provide a number to bid' };
   }
 
   const postCalls = connectionData.Items.map(async ({ connectionId }) => {
-    const bid = parseFloat(postData);
-
     const params = {
       TableName: TABLE_NAME,
       Key: { connectionId: connectionId },
       UpdateExpression: 'set #bids = list_append(if_not_exists(#bids, :empty_list), :bid), #currentMaxBid = :maxBid',
-      ConditionExpression: "currentMaxBid < :maxBid",
+      // ConditionExpression: "currentMaxBid < :maxBid",
       ExpressionAttributeNames: {
         '#bids': 'bid',
         '#currentMaxBid': 'currentMaxBid'
       },
       ExpressionAttributeValues: {
-        ':bid': [bid],
-        ':maxBid': bid,
+        ':bid': [postData],
+        ':maxBid': postData.value,
         ':empty_list': [],
       },
       ReturnValues: 'UPDATED_NEW'
@@ -82,7 +52,7 @@ exports.handler = async (event, context) => {
     }
 
     try {
-      await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: postData }).promise();
+      await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(postData) }).promise();
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection, deleting ${connectionId}`);
@@ -101,3 +71,7 @@ exports.handler = async (event, context) => {
 
   return { statusCode: 200, body: 'Data sent.' };
 };
+
+
+// Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+// SPDX-License-Identifier: MIT-0
