@@ -1,9 +1,9 @@
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
 
-const AWS = require('aws-sdk');
+const AWS = require("aws-sdk");
 
-const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: '2012-08-10' });
+const ddb = new AWS.DynamoDB.DocumentClient({ apiVersion: "2012-08-10" });
 
 const { TABLE_NAME } = process.env;
 
@@ -11,52 +11,62 @@ exports.handler = async (event, context) => {
   let connectionData;
 
   try {
-    connectionData = await ddb.scan({ TableName: TABLE_NAME, ProjectionExpression: 'connectionId' }).promise();
+    connectionData = await ddb
+      .scan({ TableName: TABLE_NAME, ProjectionExpression: "connectionId" })
+      .promise();
   } catch (e) {
     return { statusCode: 500, body: e.stack };
   }
 
   const apigwManagementApi = new AWS.ApiGatewayManagementApi({
-    apiVersion: '2018-11-29',
-    endpoint: event.requestContext.domainName + '/' + event.requestContext.stage
+    apiVersion: "2018-11-29",
+    endpoint: event.requestContext.domainName + "/" + event.requestContext.stage
   });
 
   const postData = JSON.parse(event.body).data;
-
-  if (isNaN(postData.amount)) {
-    return { statusCode: 400, body: 'Please provide a number to bid' };
+  const data = JSON.parse(postData);
+  if (isNaN(data.amount)) {
+    return { statusCode: 400, body: "Please provide a number to bid" };
   }
 
   const postCalls = connectionData.Items.map(async ({ connectionId }) => {
     const params = {
       TableName: TABLE_NAME,
       Key: { connectionId: connectionId },
-      UpdateExpression: 'set #bids = list_append(if_not_exists(#bids, :empty_list), :bid), #currentMaxBid = :maxBid',
+      UpdateExpression:
+        "set #bids = list_append(if_not_exists(#bids, :empty_list), :bid), #currentMaxBid = :maxBid",
       // ConditionExpression: "currentMaxBid < :maxBid",
       ExpressionAttributeNames: {
-        '#bids': 'bid',
-        '#currentMaxBid': 'currentMaxBid'
+        "#bids": "bid",
+        "#currentMaxBid": "currentMaxBid"
       },
       ExpressionAttributeValues: {
-        ':bid': [postData],
-        ':maxBid': postData.value,
-        ':empty_list': [],
+        ":bid": [data],
+        ":maxBid": postData.amount,
+        ":empty_list": []
       },
-      ReturnValues: 'UPDATED_NEW'
+      ReturnValues: "UPDATED_NEW"
     };
 
     try {
       await ddb.update(params).promise();
     } catch (e) {
-      console.log('Error updating db:', e.stack);
+      console.log("Error updating db:", e.stack);
     }
 
     try {
-      await apigwManagementApi.postToConnection({ ConnectionId: connectionId, Data: JSON.stringify(postData) }).promise();
+      await apigwManagementApi
+        .postToConnection({
+          ConnectionId: connectionId,
+          Data: JSON.stringify(data)
+        })
+        .promise();
     } catch (e) {
       if (e.statusCode === 410) {
         console.log(`Found stale connection, deleting ${connectionId}`);
-        await ddb.delete({ TableName: TABLE_NAME, Key: { connectionId } }).promise();
+        await ddb
+          .delete({ TableName: TABLE_NAME, Key: { connectionId } })
+          .promise();
       } else {
         throw e;
       }
@@ -69,9 +79,8 @@ exports.handler = async (event, context) => {
     return { statusCode: 500, body: e.stack };
   }
 
-  return { statusCode: 200, body: 'Data sent.' };
+  return { statusCode: 200, body: "Data sent." };
 };
-
 
 // Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 // SPDX-License-Identifier: MIT-0
