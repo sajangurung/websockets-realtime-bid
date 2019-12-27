@@ -1,0 +1,27 @@
+service: websocket-service
+provider: aws
+runtime: nodejs:latest
+region: ap-southeast-2
+versionFunctions: false
+stage: ${opt:stage, self:custom.defaultStage}
+functions:
+  onconnect:
+    name: onconnect
+    handler: onconnect/app.handler
+  ondisconnect:
+    name: ondisconnect
+    handler: ondisconnect/app.handler
+  sendmessage:
+    name: sendmessage
+    handler: sendmessage/app.handler
+custom:
+  newService: ${self:}
+  # the following will resolve identically in other serverless.yml files so long as they define
+  # `custom.newService: ${file(<relative-path-to-this-file>/serverless.yml)}`
+  exportName: ${self:custom.newService.service}-export
+resources:
+  Outputs:
+    NewServiceExport:
+      Value: "A Value To Export"
+      Export:
+        Name: ${self:custom.exportName}
